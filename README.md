@@ -1,6 +1,12 @@
 # limit_order_book_cpp
 CPP Implementation of limit order book with tcp connection
 
+## env setup
+refer vagrantfile
+
+## conan build
+-
+
 ## howto connect & send order
 telnet localhost:8080
 buy 5 102
