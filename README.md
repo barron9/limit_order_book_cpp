@@ -1,5 +1,6 @@
 # limit_order_book_cpp
-CPP Implementation of limit order book with tcp connection
+CPP Implementation of limit order book / Market Simulation with tcp connection
+
 
 ## env setup
 refer vagrantfile
