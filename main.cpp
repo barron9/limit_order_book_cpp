@@ -18,15 +18,83 @@
 const int ORDER_BOOK_HEIGHT = 30;
 const int ORDER_BOOK_WIDTH = 50;
 const int GRAPH_HEIGHT = 20;
-const int GRAPH_WIDTH = 0;
+const int GRAPH_WIDTH = 50;
 const int TRADES_HEIGHT = 30;
 const int TRADES_WIDTH = 40;
 
 
-void draw_price_graph(WINDOW* win, const std::vector<double>& prices) {
-    //werase(win);
+// void draw_price_graph(WINDOW* win, const std::vector<double>& prices) {
+//     werase(win);
+//     box(win, 0, 0);
+//     mvwprintw(win, 0, 2, " Price Chart (6h Window) ");
+
+//     if (prices.empty()) {
+//         wrefresh(win);
+//         return;
+//     }
+
+//     int height, width;
+//     getmaxyx(win, height, width);
+
+//     int graph_height = height - 2;
+//     int graph_width = width - 2;
+
+//     // Total points for 6 hours (3 sec interval)
+//     const int full_window_points = 6 * 60 * 60 / 3; // = 7200
+//     int total_points = std::min((int)prices.size(), full_window_points);
+
+//     // Calculate bucket size
+//     int bucket_count = graph_width;
+//     int bucket_size = std::max(total_points / bucket_count, 1);
+
+//     // Determine start index to show latest 6 hours
+//     int start_index = prices.size() > full_window_points
+//                       ? prices.size() - full_window_points
+//                       : 0;
+
+//     // Prepare aggregated data
+//     std::vector<double> aggregated_prices;
+
+//     for (int i = 0; i < bucket_count; ++i) {
+//         int bucket_start = start_index + i * bucket_size;
+//         int bucket_end = std::min(bucket_start + bucket_size, (int)prices.size());
+
+//         if (bucket_start >= bucket_end) break;
+
+//         // Aggregate method: average
+//         double sum = 0;
+//         for (int j = bucket_start; j < bucket_end; ++j) {
+//             sum += prices[j];
+//         }
+//         double avg = sum / (bucket_end - bucket_start);
+//         aggregated_prices.push_back(avg);
+//     }
+
+//     // Normalize aggregated prices
+//     double min_price = *std::min_element(aggregated_prices.begin(), aggregated_prices.end());
+//     double max_price = *std::max_element(aggregated_prices.begin(), aggregated_prices.end());
+//     double range = std::max(max_price - min_price, 1.0);
+
+//     // Draw graph
+//     for (int i = 0; i < aggregated_prices.size(); ++i) {
+//         int x = 1 + i;
+
+//         double normalized = (aggregated_prices[i] - min_price) / range;
+//         int y = graph_height - static_cast<int>(normalized * graph_height); // Invert y
+
+//         for (int fy = graph_height; fy >= y; --fy) {
+//             mvwaddch(win, fy, x, ACS_CKBOARD); // or '█'
+//         }
+//     }
+
+//     wrefresh(win);
+// }
+
+void draw_price_graph(WINDOW* win, const std::vector<double>& prices, const std::vector<time_t>& timestamps) {
+    werase(win);
+
     box(win, 0, 0);
-    mvwprintw(win, 0, 2, " Price Chart ");
+    mvwprintw(win, 0, 2, " Price Chart (6h Window) ");
 
     if (prices.empty()) {
         wrefresh(win);
@@ -36,37 +104,84 @@ void draw_price_graph(WINDOW* win, const std::vector<double>& prices) {
     int height, width;
     getmaxyx(win, height, width);
 
-    int graph_height = height - 2;
-    int graph_width = width - 2;
+    const int left_margin = 8;  // for price labels
+    const int bottom_margin = 2; // for time labels
+    int graph_height = height - 2 - bottom_margin;
+    int graph_width = width - 2 - left_margin;
 
-    // Normalize prices
-    double min_price = *std::min_element(prices.begin(), prices.end());
-    double max_price = *std::max_element(prices.begin(), prices.end());
+    const int full_window_points = 6 * 60 * 60 / 3; // 7200
+    int total_points = std::min((int)prices.size(), full_window_points);
+    int bucket_count = graph_width;
+    int bucket_size = std::max(total_points / bucket_count, 1);
+
+    int start_index = prices.size() > full_window_points
+                      ? prices.size() - full_window_points
+                      : 0;
+
+    std::vector<double> aggregated_prices;
+    std::vector<time_t> aggregated_times;
+
+    for (int i = 0; i < bucket_count; ++i) {
+        int bucket_start = start_index + i * bucket_size;
+        int bucket_end = std::min(bucket_start + bucket_size, (int)prices.size());
+
+        if (bucket_start >= bucket_end) break;
+
+        double sum = 0;
+        for (int j = bucket_start; j < bucket_end; ++j) {
+            sum += prices[j];
+        }
+        double avg = sum / (bucket_end - bucket_start);
+        aggregated_prices.push_back(avg);
+
+        // Take middle timestamp of bucket
+        time_t t = timestamps[bucket_start + (bucket_end - bucket_start) / 2];
+        aggregated_times.push_back(t);
+    }
+
+    double min_price = *std::min_element(aggregated_prices.begin(), aggregated_prices.end());
+    double max_price = *std::max_element(aggregated_prices.begin(), aggregated_prices.end());
     double range = std::max(max_price - min_price, 1.0);
 
-    int max_points = graph_width;
-    int start_index = prices.size() > max_points ? prices.size() - max_points : 0;
+    // Draw Y-axis price labels
+    int label_steps = 5;
+    for (int i = 0; i <= label_steps; ++i) {
+        int y = 1 + i * (graph_height) / label_steps;
+        double price = max_price - i * (range) / label_steps;
 
-    for (int i = start_index; i < prices.size(); ++i) {
-        int x = 1 + i - start_index;
+        // Format and print price on left margin
+        mvwprintw(win, y, 1, "%6.2f", price);
+    }
 
-        double normalized = (prices[i] - min_price) / range;
-        int y = graph_height - static_cast<int>(normalized * graph_height); // Invert y
+    // Draw bars
+    for (int i = 0; i < aggregated_prices.size(); ++i) {
+        int x = left_margin + i;
 
-        // Draw filled bar up to point
+        double normalized = (aggregated_prices[i] - min_price) / range;
+        int y = graph_height - static_cast<int>(normalized * graph_height);
+
         for (int fy = graph_height; fy >= y; --fy) {
-            mvwaddch(win, fy, x, ACS_CKBOARD); // or use '█' or '▓'
+            mvwaddch(win, fy + 1, x, ACS_CKBOARD); // +1 to skip top border
         }
+    }
+
+    // Draw X-axis time labels
+    int time_label_interval = std::max((int)aggregated_times.size() / 5, 1);
+    for (int i = 0; i < aggregated_times.size(); i += time_label_interval) {
+        int x = left_margin + i;
+
+        char time_str[6];
+        std::strftime(time_str, sizeof(time_str), "%H:%M", std::localtime(&aggregated_times[i]));
+
+        mvwprintw(win, graph_height + 2, x - 2, "%s", time_str); // +2 for graph + border + label
     }
 
     wrefresh(win);
 }
 
 void draw_latest_trades(WINDOW* win, const MatchingEngine& engine) {
-   // werase(win);
-
+    werase(win);
     box(win, 0, 0);
-
     wrefresh(win);
     mvwprintw(win, 0, 2, "Latest Trades");
 
@@ -195,9 +310,10 @@ int main() {
         // 🎉 Now you're free to do other non-blocking work here!
         //std::cout << "Server is running asynchronously..." << std::endl;
   
-
+        std::vector<time_t> timestamps;
         // Main loop
         while (true) {
+            timestamps.push_back(std::time(nullptr));
             draw_order_book(order_book_win, engine);
 
             // Keep last 80 prices
@@ -206,9 +322,9 @@ int main() {
             }
 
             std::vector<double> prices(price_history.begin(), price_history.end());
-            //draw_price_graph(graph_win, prices);
+            draw_price_graph(graph_win, prices, timestamps);
             draw_latest_trades(trades_win, engine);
-            std::this_thread::sleep_for(std::chrono::milliseconds(3000));
+            std::this_thread::sleep_for(std::chrono::milliseconds(300));
 
             // Simulate live trading (random orders)
             double new_price = prices.back() + ((std::rand() % 101) - 50) / 10.0;
