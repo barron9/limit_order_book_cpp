@@ -182,7 +182,7 @@ void draw_price_graph(WINDOW* win, const std::vector<double>& prices, const std:
 void draw_latest_trades(WINDOW* win, const MatchingEngine& engine) {
     werase(win);
     box(win, 0, 0);
-    wrefresh(win);
+  //  wrefresh(win);
     mvwprintw(win, 0, 2, "Latest Trades");
 
     const auto& trades = engine.get_latest_trades();
@@ -199,7 +199,6 @@ void draw_latest_trades(WINDOW* win, const MatchingEngine& engine) {
 void draw_order_book(WINDOW* win, const MatchingEngine& engine) {
     werase(win);
     box(win, 0, 0);
-    wrefresh(win);
     int width, height;
     getmaxyx(win, height, width);
 
