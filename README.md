@@ -9,7 +9,7 @@ CPP Implementation of limit order book / Market Simulation with tcp connection
 -
 
 ## howto connect & send order
-<pre>telnet localhost:8080
+<pre>telnet localhost 8080
 buy 5 102
 sell 1 100 </pre>
 
