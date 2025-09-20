@@ -24,7 +24,7 @@ const int TRADES_WIDTH = 40;
 
 
 void draw_price_graph(WINDOW* win, const std::vector<double>& prices) {
-    werase(win);
+    //werase(win);
     box(win, 0, 0);
     mvwprintw(win, 0, 2, " Price Chart ");
 
@@ -63,8 +63,11 @@ void draw_price_graph(WINDOW* win, const std::vector<double>& prices) {
 }
 
 void draw_latest_trades(WINDOW* win, const MatchingEngine& engine) {
-    werase(win);
+   // werase(win);
+
     box(win, 0, 0);
+
+    wrefresh(win);
     mvwprintw(win, 0, 2, "Latest Trades");
 
     const auto& trades = engine.get_latest_trades();
@@ -81,11 +84,11 @@ void draw_latest_trades(WINDOW* win, const MatchingEngine& engine) {
 void draw_order_book(WINDOW* win, const MatchingEngine& engine) {
     werase(win);
     box(win, 0, 0);
-
+    wrefresh(win);
     int width, height;
     getmaxyx(win, height, width);
 
-    mvwprintw(win, 1, (width / 2) - 5, "ORDER BOOK");
+    mvwprintw(win, 1, (width / 2) - 10, "ORDER BOOK");
 
     mvwprintw(win, 3, 2,  "SELL ORDERS");
     mvwprintw(win, 3, width / 2 + 2, "BUY ORDERS");
@@ -152,25 +155,17 @@ void draw_order_book(WINDOW* win, const MatchingEngine& engine) {
 
 int main() {
     initscr();
-    noecho();
-    curs_set(0);
     start_color();          // Enable color functionality
     use_default_colors();   // Allow use of terminal's default colors (optional)
-
-    // Define a color pair (ID 1 = white text on blue background)
-    init_pair(1, COLOR_WHITE, COLOR_BLUE);
-
-    // Set the background of stdscr to use that color pair
-    bkgd(COLOR_PAIR(1));   // Changes stdscr's background color
-
+    noecho();
+    curs_set(0);
+  
     std::srand(std::time(nullptr));  // Seed rand() with current time
     if (!has_colors()) {
         endwin();
         std::cerr << "Your terminal does not support color\n";
         exit(1);
     }
-    start_color();
-    use_default_colors();
     init_pair(1, COLOR_GREEN, -1); // Green text
     init_pair(2, COLOR_RED, -1);   // Red text
     // Create windows
@@ -198,7 +193,7 @@ int main() {
             }
         });
         // 🎉 Now you're free to do other non-blocking work here!
-        std::cout << "Server is running asynchronously..." << std::endl;
+        //std::cout << "Server is running asynchronously..." << std::endl;
   
 
         // Main loop
@@ -216,7 +211,7 @@ int main() {
             std::this_thread::sleep_for(std::chrono::milliseconds(3000));
 
             // Simulate live trading (random orders)
-            double new_price = 100.0 + ((std::rand() % 101) - 50) / 10.0;
+            double new_price = prices.back() + ((std::rand() % 101) - 50) / 10.0;
             int quantity = 1 + (std::rand() % 100);  // Random quantity between 1 and 10
             // std::cout << "Generated quantity: " << quantity << "\n";
             engine.add_order(new_price, quantity, (std::rand() % 2 == 0 ? "buy" : "sell"));
