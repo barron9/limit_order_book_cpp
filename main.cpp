@@ -1,190 +1,194 @@
-// // /* #include <drogon/drogon.h>
-
-// // using namespace drogon;
-
-// // int main()
-// // {
-// //     app()
-// //         .setLogPath("./")                         // Log files saved in current directory
-// //         .setLogLevel(trantor::Logger::kWarn)      // Log level set to warning
-// //         .addListener("0.0.0.0", 8080)             // Listen on all interfaces, port 8080
-// //         .setThreadNum(4)                          // Use 4 threads to handle requests
-// //         .enableRunAsDaemon()                      // Run as background daemon
-// //         .run();                                   // Start the server (blocking call)
-// // } */
-// // //  conan install .   --output-folder=.   --build=missing   --generator CMakeToolchain   --generator CMakeDeps
-// // //   cmake .. -DCMAKE_TOOLCHAIN_FILE=Release/generators/conan_toolchain.cmake -DCMAKE_BUILD_TYPE=Release
-// // // cmake --build .
-// // #include <drogon/drogon.h>
-// // #include "matching_engine.hpp"
-// // int main() {
-// //     drogon::app().registerHandler("/", [](const drogon::HttpRequestPtr &,
-// //                                           std::function<void(const drogon::HttpResponsePtr &)> &&callback) {
-// //         auto resp = drogon::HttpResponse::newHttpResponse();
-// //         resp->setBody("Hello from Drogon!");
-// //         callback(resp);
-// //     });
-// //     MatchingEngine engine;
-
-// //     engine.add_order(100.0, 10, "buy");
-// //     engine.add_order(101.0, 5, "buy");
-// //     engine.add_order(99.0, 20, "sell");
-// //     engine.add_order(101.0, 3, "sell");
-// //     engine.add_order(100.0, 5, "sell");
-// //     drogon::app().addListener("0.0.0.0", 8080);  // Optional: make sure it listens on all interfaces
-// //     drogon::app().run();
-// // }
-
-// #include <boost/asio.hpp>
-// #include <iostream>
-// #include <string>
-// #include <memory>
-// #include <thread>
-// #include "matching_engine.hpp"  // Your matching engine header
-
-// using boost::asio::ip::tcp;
-
-// // Session handles communication with a single client
-// class Session : public std::enable_shared_from_this<Session> {
-//     tcp::socket socket_;
-//     MatchingEngine& engine_;
-//     boost::asio::streambuf buffer_;
-
-// public:
-//     Session(tcp::socket socket, MatchingEngine& engine)
-//         : socket_(std::move(socket)), engine_(engine) {}
-
-//     void start() {
-//         do_read();
-//     }
-
-// private:
-//     void do_read() {
-//         auto self(shared_from_this());
-//         boost::asio::async_read_until(socket_, buffer_, '\n',
-//             [this, self](boost::system::error_code ec, std::size_t length) {
-//                 if (!ec) {
-//                     std::istream is(&buffer_);
-//                     std::string line;
-//                     std::getline(is, line);
-
-//                     // Example input format: "buy 100 10.5"
-//                     // side quantity price
-//                     std::istringstream iss(line);
-//                     std::string side;
-//                     int quantity;
-//                     double price;
-//                     if (iss >> side >> quantity >> price) {
-//                         engine_.add_order(price, quantity, side);
-
-//                         std::string response = "Order added: " + line + "\n";
-//                         do_write(response);
-//                     } else {
-//                         std::string response = "Invalid order format\n";
-//                         do_write(response);
-//                     }
-//                 }
-//             });
-//     }
-
-//     void do_write(const std::string& message) {
-//         auto self(shared_from_this());
-//         boost::asio::async_write(socket_,
-//             boost::asio::buffer(message),
-//             [this, self](boost::system::error_code ec, std::size_t /*length*/) {
-//                 if (!ec) {
-//                     do_read();
-//                 }
-//             });
-//     }
-// };
-
-// class Server {
-//     tcp::acceptor acceptor_;
-//     MatchingEngine engine_;
-
-// public:
-//     Server(boost::asio::io_context& io_context, short port)
-//         : acceptor_(io_context, tcp::endpoint(tcp::v4(), port)) {
-//         do_accept();
-//     }
-
-// private:
-//     void do_accept() {
-//         acceptor_.async_accept(
-//             [this](boost::system::error_code ec, tcp::socket socket) {
-//                 if (!ec) {
-//                     std::make_shared<Session>(std::move(socket), engine_)->start();
-//                 }
-//                 do_accept();
-//             });
-//     }
-// };
-
-// int main() {
-//     try {
-//         boost::asio::io_context io_context;
-
-//         Server server(io_context, 8080);
-
-//         io_context.run();
-//     } catch (std::exception& e) {
-//         std::cerr << "Exception: " << e.what() << "\n";
-//     }
-
-//     return 0;
-// }
-
-#include <ncurses.h>
 #include <deque>
 #include <vector>
 #include <chrono>
 #include <thread>
 #include "matching_engine.hpp"
-#include <ncurses.h>
+#ifdef _WIN32
+#include <ncurses.h>   // from PDCurses
+#else
+#include <ncurses.h>  // on Linux/macOS
+#endif
+#undef timeout
+#undef stdscr
+
 #include <iomanip>
 #include <sstream>
-
+#include "Server.hpp"
 // You may need these includes for sorting:
 #include <map>
 #include <vector>
 #include <algorithm>
+
 // Constants for layout
-const int ORDER_BOOK_HEIGHT = 20;
-const int ORDER_BOOK_WIDTH = 50;
+const int ORDER_BOOK_HEIGHT = 30;
+const int ORDER_BOOK_WIDTH = 40;
 const int GRAPH_HEIGHT = 20;
-const int GRAPH_WIDTH = 80;
-const int TRADES_HEIGHT = 20;
-const int TRADES_WIDTH = 40;
+const int GRAPH_WIDTH = 40;
+const int TRADES_HEIGHT = 30;
+const int TRADES_WIDTH = 35;
 
 
-// Draws the price graph in the given window
-void draw_price_graph(WINDOW* win, const std::vector<double>& prices) {
+// void draw_price_graph(WINDOW* win, const std::vector<double>& prices) {
+//     werase(win);
+//     box(win, 0, 0);
+//     mvwprintw(win, 0, 2, " Price Chart (6h Window) ");
+
+//     if (prices.empty()) {
+//         wrefresh(win);
+//         return;
+//     }
+
+//     int height, width;
+//     getmaxyx(win, height, width);
+
+//     int graph_height = height - 2;
+//     int graph_width = width - 2;
+
+//     // Total points for 6 hours (3 sec interval)
+//     const int full_window_points = 6 * 60 * 60 / 3; // = 7200
+//     int total_points = std::min((int)prices.size(), full_window_points);
+
+//     // Calculate bucket size
+//     int bucket_count = graph_width;
+//     int bucket_size = std::max(total_points / bucket_count, 1);
+
+//     // Determine start index to show latest 6 hours
+//     int start_index = prices.size() > full_window_points
+//                       ? prices.size() - full_window_points
+//                       : 0;
+
+//     // Prepare aggregated data
+//     std::vector<double> aggregated_prices;
+
+//     for (int i = 0; i < bucket_count; ++i) {
+//         int bucket_start = start_index + i * bucket_size;
+//         int bucket_end = std::min(bucket_start + bucket_size, (int)prices.size());
+
+//         if (bucket_start >= bucket_end) break;
+
+//         // Aggregate method: average
+//         double sum = 0;
+//         for (int j = bucket_start; j < bucket_end; ++j) {
+//             sum += prices[j];
+//         }
+//         double avg = sum / (bucket_end - bucket_start);
+//         aggregated_prices.push_back(avg);
+//     }
+
+//     // Normalize aggregated prices
+//     double min_price = *std::min_element(aggregated_prices.begin(), aggregated_prices.end());
+//     double max_price = *std::max_element(aggregated_prices.begin(), aggregated_prices.end());
+//     double range = std::max(max_price - min_price, 1.0);
+
+//     // Draw graph
+//     for (int i = 0; i < aggregated_prices.size(); ++i) {
+//         int x = 1 + i;
+
+//         double normalized = (aggregated_prices[i] - min_price) / range;
+//         int y = graph_height - static_cast<int>(normalized * graph_height); // Invert y
+
+//         for (int fy = graph_height; fy >= y; --fy) {
+//             mvwaddch(win, fy, x, ACS_CKBOARD); // or '█'
+//         }
+//     }
+
+//     wrefresh(win);
+// }
+
+void draw_price_graph(WINDOW* win, const std::vector<double>& prices, const std::vector<time_t>& timestamps) {
     werase(win);
+
     box(win, 0, 0);
-    mvwprintw(win, 0, 2, " Price Graph ");
+    mvwprintw(win, 0, 2, " Price Chart (6h Window) ");
 
     if (prices.empty()) {
-        mvwprintw(win, 1, 1, "No price data.");
         wrefresh(win);
         return;
     }
 
-    double min_price = *std::min_element(prices.begin(), prices.end());
-    double max_price = *std::max_element(prices.begin(), prices.end());
-    double range = max_price - min_price;
-    if (range == 0) range = 10.0;
+    int height, width;
+    getmaxyx(win, height, width);
 
-    int width = GRAPH_WIDTH - 2;
-    int height = GRAPH_HEIGHT - 2;
-    int max_points = std::min(width, static_cast<int>(prices.size()));
+    const int left_margin = 8;  // for price labels
+    const int bottom_margin = 2; // for time labels
+    int graph_height = height - 2 - bottom_margin;
+    int graph_width = width - 2 - left_margin;
 
-    for (int i = 0; i < max_points; ++i) {
-        int index = prices.size() - max_points + i;
-        double price = prices[index];
-        int y = height - static_cast<int>(((price - min_price) / range) * height);
-        int x = i + 1;
-        mvwaddch(win, y + 1, x, ACS_DIAMOND);  // graphical block
+    const int full_window_points = 6 * 60 * 60 / 3; // 7200
+    int total_points = std::min((int)prices.size(), full_window_points);
+    int bucket_count = graph_width;
+    int bucket_size = std::max(total_points / bucket_count, 1);
+
+    int start_index = prices.size() > full_window_points
+                      ? prices.size() - full_window_points
+                      : 0;
+
+    std::vector<double> aggregated_prices;
+    std::vector<time_t> aggregated_times;
+
+    for (int i = 0; i < bucket_count; ++i) {
+        int bucket_start = start_index + i * bucket_size;
+        int bucket_end = std::min(bucket_start + bucket_size, (int)prices.size());
+
+        if (bucket_start >= bucket_end) break;
+
+        double sum = 0;
+        for (int j = bucket_start; j < bucket_end; ++j) {
+            sum += prices[j];
+        }
+        double avg = sum / (bucket_end - bucket_start);
+        aggregated_prices.push_back(avg);
+
+        // Take middle timestamp of bucket
+        time_t t = timestamps[bucket_start + (bucket_end - bucket_start) / 2];
+        aggregated_times.push_back(t);
+    }
+
+    double min_price = *std::min_element(aggregated_prices.begin(), aggregated_prices.end());
+    double max_price = *std::max_element(aggregated_prices.begin(), aggregated_prices.end());
+    double range = std::max(max_price - min_price, 1.0);
+
+    // Draw Y-axis price labels
+    int label_steps = 5;
+    for (int i = 0; i <= label_steps; ++i) {
+        int y = 1 + i * (graph_height) / label_steps;
+        double price = max_price - i * (range) / label_steps;
+
+        // Format and print price on left margin
+        mvwprintw(win, y, 1, "%6.2f", price);
+    }
+
+    // Draw bars
+    for (int i = 0; i < aggregated_prices.size(); ++i) {
+        int x = left_margin + i;
+
+        double normalized = (aggregated_prices[i] - min_price) / range;
+        int y = graph_height - static_cast<int>(normalized * graph_height);
+
+        for (int fy = graph_height; fy >= y; --fy) {
+            mvwaddch(win, fy + 1, x, ACS_CKBOARD); // +1 to skip top border
+        }
+    }
+
+    // Draw X-axis time labels
+    // Number of labels you want along X-axis (e.g., 5)
+    int label_count = 5;
+
+    // Interval between labels in bucket units
+    int label_interval = std::max((int)aggregated_times.size() / label_count, 1);
+
+    for (int label_i = 0; label_i < label_count; ++label_i) {
+        int data_i = label_i * label_interval;
+        if (data_i >= (int)aggregated_times.size()) break;
+
+        int x = left_margin + data_i;
+
+        // Format time string
+        char time_str[6];
+        std::strftime(time_str, sizeof(time_str), "%H:%M", std::localtime(&aggregated_times[data_i]));
+
+        // Print label on bottom margin (graph_height + 2)
+        mvwprintw(win, graph_height + 2, x - 2, "%s", time_str);
     }
 
     wrefresh(win);
@@ -193,6 +197,7 @@ void draw_price_graph(WINDOW* win, const std::vector<double>& prices) {
 void draw_latest_trades(WINDOW* win, const MatchingEngine& engine) {
     werase(win);
     box(win, 0, 0);
+  //  wrefresh(win);
     mvwprintw(win, 0, 2, "Latest Trades");
 
     const auto& trades = engine.get_latest_trades();
@@ -209,18 +214,17 @@ void draw_latest_trades(WINDOW* win, const MatchingEngine& engine) {
 void draw_order_book(WINDOW* win, const MatchingEngine& engine) {
     werase(win);
     box(win, 0, 0);
-
     int width, height;
     getmaxyx(win, height, width);
 
-    mvwprintw(win, 1, (width / 2) - 5, "ORDER BOOK");
+    mvwprintw(win, 1, (width / 2) - 10, "ORDER BOOK");
 
     mvwprintw(win, 3, 2,  "SELL ORDERS");
     mvwprintw(win, 3, width / 2 + 2, "BUY ORDERS");
 
     // Display only top 10
     int row = 5;
-    int max_rows = std::min(10, height - row - 2);
+    int max_rows = std::min(20, height - row - 2);
 
     // Convert maps to sorted vectors
     auto bids_map = engine.get_bids(); // assume: std::map<double, std::queue<int>>
@@ -276,20 +280,38 @@ void draw_order_book(WINDOW* win, const MatchingEngine& engine) {
 
     wrefresh(win);
 }
+void xwrefresh() {
+    int ch = getch();
 
+    if (ch == KEY_RESIZE || ch == 'r') {
+        // Handle resize or simulated resize
+        endwin();     // reset terminal mode
+        refresh();    // reinitialize screen
+        clear();      // clear the screen
+
+        
+        refresh();
+    }
+    else if (ch == 'q') {
+        
+    }
+}
 
 int main() {
     initscr();
+    start_color();          // Enable color functionality
+    use_default_colors();   // Allow use of terminal's default colors (optional)
     noecho();
     curs_set(0);
+    keypad(stdscr, TRUE);
+    nodelay(stdscr, TRUE);
+  
     std::srand(std::time(nullptr));  // Seed rand() with current time
     if (!has_colors()) {
         endwin();
         std::cerr << "Your terminal does not support color\n";
         exit(1);
     }
-    start_color();
-    use_default_colors();
     init_pair(1, COLOR_GREEN, -1); // Green text
     init_pair(2, COLOR_RED, -1);   // Red text
     // Create windows
@@ -297,35 +319,58 @@ int main() {
     WINDOW* graph_win = newwin(GRAPH_HEIGHT, GRAPH_WIDTH, 0, ORDER_BOOK_WIDTH + 2);
     WINDOW* trades_win = newwin(TRADES_HEIGHT, TRADES_WIDTH, 0, ORDER_BOOK_WIDTH + GRAPH_WIDTH + 2);
     // Initialize engine and price history
-    MatchingEngine engine;
+   // MatchingEngine engine;
     std::deque<double> price_history;
 
-    // Dummy initial orders
-    engine.add_order(100.0, 10, "buy");
-    engine.add_order(101.0, 5, "buy");
-    engine.add_order(102.0, 5, "sell");
-    price_history.push_back(101.0);
+    // // Dummy initial orders
+    // engine.add_order(100.0, 10, "buy");
+    // engine.add_order(101.0, 5, "buy");
+    // engine.add_order(102.0, 5, "sell");
+    price_history.push_back(100.0);//opening price
+    boost::asio::io_context io_context;
+    MatchingEngine engine;  // OK here
+    try {
+        std::thread io_thread([&io_context,&engine]() {
+            try {
+                Server server(engine, io_context, 8080);
+                io_context.run();
+            } catch (const std::exception& e) {
+                std::cerr << "Exception in io_context thread: " << e.what() << std::endl;
+            }
+        });
+        // 🎉 Now you're free to do other non-blocking work here!
+        //std::cout << "Server is running asynchronously..." << std::endl;
+  
+        std::vector<time_t> timestamps;
+        // Main loop
+        while (true) {
+           // xwrefresh();
+            timestamps.push_back(std::time(nullptr));
+            draw_order_book(order_book_win, engine);
 
-    // Main loop
-    while (true) {
-        draw_order_book(order_book_win, engine);
+            // Keep last 80 prices
+            if (price_history.size() > GRAPH_WIDTH - 2) {
+                price_history.pop_front();
+            }
 
-        // Keep last 80 prices
-        if (price_history.size() > GRAPH_WIDTH - 2) {
-            price_history.pop_front();
+            std::vector<double> prices(price_history.begin(), price_history.end());
+            draw_price_graph(graph_win, prices, timestamps);
+            draw_latest_trades(trades_win, engine);
+            std::this_thread::sleep_for(std::chrono::milliseconds(300));
+
+            // Simulate live trading (random orders)
+            double new_price = prices.back() + ((std::rand() % 101) - 50) / 10.0;
+            if(new_price < 0.1f){
+                continue;
+            }
+            int quantity = 1 + (std::rand() % 100);  // Random quantity between 1 and 10
+            // std::cout << "Generated quantity: " << quantity << "\n";
+            engine.add_order(new_price, quantity, (std::rand() % 2 == 0 ? "buy" : "sell"));
+            price_history.push_back(new_price);
+
         }
-
-        std::vector<double> prices(price_history.begin(), price_history.end());
-        draw_price_graph(graph_win, prices);
-        draw_latest_trades(trades_win, engine);
-        std::this_thread::sleep_for(std::chrono::milliseconds(3000));
-
-        // Simulate live trading (random orders)
-        double new_price = 100.0 + ((std::rand() % 101) - 50) / 10.0;
-        int quantity = 1 + (std::rand() % 100);  // Random quantity between 1 and 10
-        // std::cout << "Generated quantity: " << quantity << "\n";
-        engine.add_order(new_price, quantity, (std::rand() % 2 == 0 ? "buy" : "sell"));
-        price_history.push_back(new_price);
+      } catch (std::exception& e) {
+        std::cerr << "Exception: " << e.what() << "\n";
     }
 
     endwin();

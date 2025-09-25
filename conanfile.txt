@@ -1,5 +1,8 @@
 [requires]
-drogon/1.9.10
+#drogon/1.9.10
+#pdcurses/3.9
+ncurses/6.5
+boost/1.87.0
 [generators]
 CMakeDeps
 CMakeToolchain
