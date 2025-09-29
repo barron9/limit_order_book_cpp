@@ -16,9 +16,27 @@ add_executable(my_server
     Session.cpp
     Server.cpp
 )
-
 # Link libraries
 target_link_libraries(my_server
         boost::boost
         Curses::Curses
+)
+ 
+# ---------------------------
+# Benchmark tests executable
+add_executable(benchmark_tests Bench.cpp)  # Your benchmark source(s)
+
+target_include_directories(benchmark_tests PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../benchmark/include
+)
+
+target_link_libraries(benchmark_tests PRIVATE
+    optimized ${CMAKE_CURRENT_SOURCE_DIR}/../benchmark/build/src/Release/benchmark.lib
+    optimized ${CMAKE_CURRENT_SOURCE_DIR}/../benchmark/build/src/Release/benchmark_main.lib
+    shlwapi
+    advapi32
+)
+
+target_compile_definitions(benchmark_tests PRIVATE
+    BENCHMARK_STATIC_DEFINE
 )
