@@ -38,5 +38,6 @@ target_link_libraries(benchmark_tests PRIVATE
 )
 
 target_compile_definitions(benchmark_tests PRIVATE
+    /O2
     BENCHMARK_STATIC_DEFINE
 )
