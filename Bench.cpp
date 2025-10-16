@@ -40,7 +40,7 @@ public:
 };
 
 template <typename T>
-size_t TrackingAllocator<T>::total_allocated = 0;
+std::atomic<size_t> TrackingAllocator<T>::total_allocated = 0;
 template <typename Alloc = std::allocator<Order>>
 struct PriceLevel {
     double price;
