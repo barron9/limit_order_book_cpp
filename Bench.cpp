@@ -19,8 +19,8 @@ class TrackingAllocator {
 public:
     using value_type = T;
 
-    static inline size_t total_allocated = 0;
-    static inline size_t total_deallocated = 0;
+    static inline std::atomic<size_t> total_allocated = 0;
+    static inline std::atomic<size_t> total_deallocated = 0;
 
     TrackingAllocator() = default;
 
@@ -28,13 +28,13 @@ public:
     constexpr TrackingAllocator(const TrackingAllocator<U>&) noexcept {}
 
     T* allocate(std::size_t n) {
-        total_allocated += n * sizeof(T);
+        total_allocated.fetch_add( n * sizeof(T),_Atomic_memory_order_relaxed);
         return static_cast<T*>(::operator new(n * sizeof(T)));
     }
 
     void deallocate(T* p, std::size_t n) noexcept {
-    total_allocated -= n * sizeof(T);
-    total_deallocated += n * sizeof(T); // ← Add this
+    total_allocated.fetch_sub(n * sizeof(T),_Atomic_memory_order_relaxed);
+    total_deallocated.fetch_add(n * sizeof(T),_Atomic_memory_order_relaxed); // ← Add this
     ::operator delete(p);
     }  
 };
