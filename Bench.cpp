@@ -28,13 +28,13 @@ public:
     constexpr TrackingAllocator(const TrackingAllocator<U>&) noexcept {}
 
     T* allocate(std::size_t n) {
-        total_allocated.fetch_add( n * sizeof(T),_Atomic_memory_order_relaxed);
+        total_allocated.fetch_add( n * sizeof(T),std::memory_order_relaxed);
         return static_cast<T*>(::operator new(n * sizeof(T)));
     }
 
     void deallocate(T* p, std::size_t n) noexcept {
-    total_allocated.fetch_sub(n * sizeof(T),_Atomic_memory_order_relaxed);
-    total_deallocated.fetch_add(n * sizeof(T),_Atomic_memory_order_relaxed); // ← Add this
+    total_allocated.fetch_sub(n * sizeof(T),std::memory_order_relaxed);
+    total_deallocated.fetch_add(n * sizeof(T),std::memory_order_relaxed); 
     ::operator delete(p);
     }  
 };
